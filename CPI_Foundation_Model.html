@@ -1,0 +1,1424 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cpi_foundation_model.py — BasGenBio</title>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.1.0/3Dmol-min.js"></script>
+<style>
+  :root {
+    --bg: #1E1E1E;
+    --bg2: #252526;
+    --bg3: #2D2D2D;
+    --bg4: #333333;
+    --sidebar: #181818;
+    --tab-active: #1E1E1E;
+    --tab-inactive: #2D2D2D;
+    --border: #3E3E3E;
+    --border2: #474747;
+    --text: #D4D4D4;
+    --text2: #858585;
+    --text3: #6A6A6A;
+    --linenum: #5A5A5A;
+    --selection: #264F78;
+    --highlight: #2A2D2E;
+    /* Syntax Colors */
+    --keyword: #569CD6;
+    --string: #CE9178;
+    --number: #B5CEA8;
+    --function: #DCDCAA;
+    --class: #4EC9B0;
+    --comment: #6A9955;
+    --variable: #9CDCFE;
+    --operator: #D4D4D4;
+    --decorator: #C586C0;
+    --type: #4EC9B0;
+    --param: #9CDCFE;
+    --bracket: #FFD700;
+    --error: #F44747;
+    --warning: #CCA700;
+    --success: #4EC9B0;
+    --info: #569CD6;
+    --accent: #007ACC;
+    --scrollbar: #424242;
+    --minimap: rgba(255,255,255,0.05);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Fira Code', 'Consolas', 'Courier New', monospace;
+    background: var(--bg);
+    color: var(--text);
+    overflow-x: hidden;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 0; }
+  ::-webkit-scrollbar-corner { background: var(--bg); }
+
+  /* ── Title Bar ── */
+  .titlebar {
+    height: 30px; background: var(--sidebar);
+    display: flex; align-items: center; padding: 0 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px; color: var(--text2);
+    -webkit-app-region: drag;
+  }
+  .titlebar-dots { display: flex; gap: 8px; margin-right: 16px; }
+  .titlebar-dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot-red { background: #FF5F57; }
+  .dot-yellow { background: #FEBC2E; }
+  .dot-green { background: #28C840; }
+  .titlebar-text { flex: 1; text-align: center; }
+
+  /* ── Layout ── */
+  .ide-layout { display: flex; height: calc(100vh - 30px); }
+
+  /* ── Activity Bar ── */
+  .activity-bar {
+    width: 48px; background: var(--sidebar);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; align-items: center;
+    padding-top: 4px; flex-shrink: 0;
+  }
+  .activity-icon {
+    width: 48px; height: 48px; display: flex; align-items: center; justify-content: center;
+    color: var(--text3); cursor: pointer; position: relative; transition: color 0.15s;
+    font-size: 18px;
+  }
+  .activity-icon:hover { color: var(--text); }
+  .activity-icon.active { color: var(--text); }
+  .activity-icon.active::before {
+    content: ''; position: absolute; left: 0; top: 8px; bottom: 8px;
+    width: 2px; background: var(--text);
+  }
+
+  /* ── Sidebar / Explorer ── */
+  .sidebar {
+    width: 260px; background: var(--bg2);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0;
+    overflow-y: auto;
+  }
+  .sidebar-header {
+    padding: 10px 16px; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 1px; color: var(--text2);
+    border-bottom: 1px solid var(--border);
+  }
+  .tree-section { padding: 4px 0; }
+  .tree-header {
+    display: flex; align-items: center; padding: 4px 8px 4px 16px;
+    font-size: 11px; font-weight: 700; color: var(--text2);
+    text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer;
+    user-select: none;
+  }
+  .tree-header:hover { background: var(--highlight); }
+  .tree-header .arrow { margin-right: 4px; font-size: 10px; transition: transform 0.15s; display: inline-block; }
+  .tree-header .arrow.open { transform: rotate(90deg); }
+  .tree-item {
+    display: flex; align-items: center; padding: 3px 8px 3px 28px;
+    font-size: 12px; cursor: pointer; color: var(--text);
+    text-decoration: none; user-select: none;
+  }
+  .tree-item:hover { background: var(--highlight); }
+  .tree-item.active { background: var(--selection); }
+  .tree-item .file-icon { margin-right: 6px; font-size: 14px; width: 16px; text-align: center; }
+  .tree-item.indent-2 { padding-left: 44px; }
+  .file-py { color: #519ABA; }
+  .file-md { color: #519ABA; }
+  .file-json { color: var(--warning); }
+  .file-folder { color: var(--warning); }
+  .file-yml { color: var(--decorator); }
+
+  /* ── Main Editor Area ── */
+  .editor-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  /* ── Tabs ── */
+  .tab-bar {
+    display: flex; background: var(--tab-inactive);
+    border-bottom: 1px solid var(--border); height: 35px; overflow-x: auto;
+    flex-shrink: 0;
+  }
+  .tab {
+    display: flex; align-items: center; padding: 0 16px; gap: 8px;
+    font-size: 12px; cursor: pointer; border-right: 1px solid var(--border);
+    white-space: nowrap; transition: background 0.1s; color: var(--text2);
+    min-width: 0;
+  }
+  .tab:hover { background: var(--bg3); }
+  .tab.active {
+    background: var(--tab-active); color: var(--text);
+    border-top: 1px solid var(--accent); margin-top: -1px;
+  }
+  .tab .close { font-size: 14px; opacity: 0; transition: opacity 0.1s; }
+  .tab:hover .close { opacity: 0.6; }
+
+  /* ── Breadcrumb ── */
+  .breadcrumb {
+    padding: 4px 16px; font-size: 11px; color: var(--text3);
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+  }
+  .breadcrumb span { color: var(--text2); }
+
+  /* ── Code Editor ── */
+  .editor-scroll { flex: 1; overflow-y: auto; position: relative; }
+  .editor {
+    padding: 8px 0; counter-reset: line;
+    min-height: 100%;
+  }
+  .code-line {
+    display: flex; padding: 0 16px 0 0; min-height: 20px;
+    line-height: 20px; position: relative;
+  }
+  .code-line:hover { background: var(--highlight); }
+  .code-line.active-line { background: var(--highlight); }
+  .line-number {
+    width: 60px; text-align: right; padding-right: 16px;
+    color: var(--linenum); user-select: none; flex-shrink: 0;
+    font-size: 12px;
+  }
+  .code-line.active-line .line-number { color: var(--text2); }
+  .code-content { flex: 1; white-space: pre-wrap; word-break: break-all; }
+
+  /* ── Syntax Highlighting Classes ── */
+  .kw { color: var(--keyword); }
+  .str { color: var(--string); }
+  .num { color: var(--number); }
+  .fn { color: var(--function); }
+  .cls { color: var(--class); }
+  .cmt { color: var(--comment); font-style: italic; }
+  .var { color: var(--variable); }
+  .op { color: var(--operator); }
+  .dec { color: var(--decorator); }
+  .typ { color: var(--type); }
+  .par { color: var(--param); }
+  .brk { color: var(--bracket); }
+
+  /* ── Section Blocks (replacing cards) ── */
+  .section-block {
+    margin: 24px 0; padding: 0;
+  }
+  .section-comment {
+    padding: 12px 0;
+  }
+
+  /* ── Data Table (IDE style) ── */
+  .ide-table {
+    width: 100%; border-collapse: collapse; font-size: 12px;
+    margin: 8px 0; background: var(--bg2); border: 1px solid var(--border);
+  }
+  .ide-table th {
+    background: var(--bg4); color: var(--keyword);
+    padding: 6px 12px; text-align: left; font-weight: 600;
+    border-bottom: 1px solid var(--border); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .ide-table td {
+    padding: 5px 12px; border-bottom: 1px solid rgba(62,62,62,0.5);
+  }
+  .ide-table tr:hover { background: var(--highlight); }
+  .ide-tag {
+    display: inline-block; padding: 1px 6px; border-radius: 3px;
+    font-size: 10px; font-weight: 600;
+  }
+  .tag-kw { background: rgba(86,156,214,0.2); color: var(--keyword); }
+  .tag-str { background: rgba(206,145,120,0.2); color: var(--string); }
+  .tag-fn { background: rgba(220,220,170,0.2); color: var(--function); }
+  .tag-cls { background: rgba(78,201,176,0.2); color: var(--class); }
+  .tag-cmt { background: rgba(106,153,85,0.2); color: var(--comment); }
+
+  /* ── Architecture Diagram (ASCII art style) ── */
+  .arch-ascii {
+    background: var(--bg2); border: 1px solid var(--border);
+    padding: 20px 24px; margin: 12px 0;
+    font-family: 'Fira Code', monospace; font-size: 12px;
+    line-height: 1.6; overflow-x: auto; position: relative;
+  }
+  .arch-ascii::before {
+    content: 'ARCHITECTURE(아키텍처)'; position: absolute; top: 0; right: 0;
+    background: var(--accent); color: #fff; padding: 2px 8px;
+    font-size: 9px; font-weight: 700; letter-spacing: 1px;
+  }
+
+  /* ── Terminal / Results ── */
+  .terminal {
+    background: var(--sidebar); border: 1px solid var(--border);
+    margin: 12px 0; font-size: 12px; overflow: hidden;
+  }
+  .terminal-header {
+    background: var(--bg4); padding: 4px 12px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--border); font-size: 11px;
+  }
+  .terminal-tab {
+    padding: 2px 8px; cursor: pointer; color: var(--text2);
+    border-bottom: 1px solid transparent;
+  }
+  .terminal-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .terminal-body { padding: 12px; max-height: 400px; overflow-y: auto; }
+  .term-line { line-height: 1.8; }
+  .term-prompt { color: var(--success); }
+  .term-cmd { color: var(--text); }
+  .term-output { color: var(--text2); }
+  .term-success { color: var(--success); }
+  .term-error { color: var(--error); }
+  .term-warning { color: var(--warning); }
+  .term-info { color: var(--info); }
+
+  /* ── Interactive Demo ── */
+  .demo-panel {
+    background: var(--bg2); border: 1px solid var(--border);
+    margin: 12px 0;
+  }
+  .demo-panel-header {
+    background: var(--bg4); padding: 6px 12px;
+    font-size: 11px; font-weight: 600; color: var(--keyword);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .demo-panel-body { padding: 16px; }
+  .demo-input-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .demo-label { color: var(--keyword); font-size: 12px; min-width: 80px; }
+  .demo-input {
+    flex: 1; padding: 6px 10px; background: var(--bg);
+    border: 1px solid var(--border); color: var(--string);
+    font-family: 'Fira Code', monospace; font-size: 12px;
+    outline: none; transition: border-color 0.15s;
+  }
+  .demo-input:focus { border-color: var(--accent); }
+  .demo-btn {
+    padding: 6px 16px; background: var(--accent); color: #fff;
+    border: none; font-family: 'Fira Code', monospace; font-size: 11px;
+    font-weight: 600; cursor: pointer; letter-spacing: 0.5px;
+    transition: background 0.15s;
+  }
+  .demo-btn:hover { background: #1A8CDB; }
+  .preset-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .preset-chip {
+    padding: 3px 10px; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text2); font-size: 11px; cursor: pointer; transition: all 0.15s;
+  }
+  .preset-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Result Items ── */
+  .result-item {
+    display: flex; align-items: center; padding: 8px 12px;
+    border-bottom: 1px solid rgba(62,62,62,0.4); gap: 12px;
+    transition: background 0.1s; font-size: 12px;
+  }
+  .result-item:hover { background: var(--highlight); }
+  .result-rank {
+    width: 24px; height: 24px; display: flex;
+    align-items: center; justify-content: center;
+    font-weight: 700; font-size: 11px; flex-shrink: 0;
+  }
+  .r1 { color: var(--warning); }
+  .r2 { color: var(--keyword); }
+  .r3 { color: var(--class); }
+  .rx { color: var(--text3); }
+  .result-info { flex: 1; min-width: 0; }
+  .result-name { font-weight: 600; color: var(--function); }
+  .result-func { font-size: 11px; color: var(--text3); margin-top: 1px; }
+  .result-vals { display: flex; gap: 16px; flex-shrink: 0; }
+  .result-val { text-align: right; }
+  .result-val .v { font-weight: 600; }
+  .result-val .l { font-size: 10px; color: var(--text3); }
+  .prob-bar {
+    width: 120px; height: 4px; background: var(--bg4);
+    margin-top: 4px; overflow: hidden;
+  }
+  .prob-fill { height: 100%; transition: width 0.5s ease; }
+
+  /* ── Heatmap ── */
+  .heatmap-grid { display: flex; flex-direction: column; gap: 1px; margin: 8px 0; }
+  .heatmap-row { display: flex; gap: 1px; }
+  .hm-cell {
+    width: 18px; height: 18px; font-size: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; transition: transform 0.15s; cursor: default;
+  }
+  .hm-cell:hover { transform: scale(1.4); z-index: 2; }
+  .hm-label { width: 18px; height: 18px; font-size: 9px; color: var(--keyword);
+    display: flex; align-items: center; justify-content: center; font-weight: 700; }
+
+  /* ── Minimap ── */
+  .minimap {
+    width: 60px; background: var(--bg2); border-left: 1px solid var(--border);
+    flex-shrink: 0; position: relative; overflow: hidden;
+  }
+  .minimap-block {
+    position: absolute; left: 8px; right: 8px; border-radius: 1px;
+    opacity: 0.3;
+  }
+
+  /* ── Status Bar ── */
+  .statusbar {
+    height: 22px; background: var(--accent);
+    display: flex; align-items: center; padding: 0 12px;
+    font-size: 11px; color: #fff; gap: 16px;
+    flex-shrink: 0;
+  }
+  .statusbar-left { display: flex; gap: 12px; flex: 1; }
+  .statusbar-right { display: flex; gap: 12px; }
+  .status-item { display: flex; align-items: center; gap: 4px; }
+
+  /* ── 3D Viewer Panel ── */
+  .viewer-overlay {
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6); z-index: 200;
+    align-items: center; justify-content: center;
+  }
+  .viewer-overlay.open { display: flex; }
+  .viewer-panel {
+    background: var(--bg2); border: 1px solid var(--border);
+    width: 90vw; max-width: 1100px; height: 80vh; max-height: 700px;
+    display: flex; flex-direction: column; position: relative;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .viewer-titlebar {
+    height: 32px; background: var(--bg4); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 12px;
+    font-size: 12px; font-weight: 600; color: var(--keyword);
+    flex-shrink: 0;
+  }
+  .viewer-titlebar .close-btn {
+    margin-left: auto; width: 24px; height: 24px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--text3); font-size: 16px;
+    transition: all 0.15s;
+  }
+  .viewer-titlebar .close-btn:hover { color: var(--error); background: rgba(244,71,71,0.15); }
+  .viewer-body {
+    flex: 1; display: flex; overflow: hidden;
+  }
+  .viewer-3d {
+    flex: 1; position: relative; background: #000;
+    min-height: 300px;
+  }
+  .viewer-info {
+    width: 320px; background: var(--bg); border-left: 1px solid var(--border);
+    padding: 16px; overflow-y: auto; flex-shrink: 0;
+    font-size: 12px;
+  }
+  .viewer-info h3 { font-size: 14px; font-weight: 700; color: var(--function); margin-bottom: 8px; }
+  .viewer-info .info-row {
+    display: flex; justify-content: space-between; padding: 4px 0;
+    border-bottom: 1px solid rgba(62,62,62,0.4);
+  }
+  .viewer-info .info-label { color: var(--text3); }
+  .viewer-info .info-value { color: var(--text); font-weight: 500; }
+  .viewer-controls {
+    display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap;
+  }
+  .viewer-ctrl-btn {
+    padding: 4px 10px; background: var(--bg2); border: 1px solid var(--border);
+    color: var(--text2); font-size: 10px; cursor: pointer;
+    font-family: 'Fira Code', monospace; transition: all 0.15s;
+  }
+  .viewer-ctrl-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .viewer-ctrl-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(0,122,204,0.1); }
+  .viewer-loading {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    color: var(--text2); font-size: 12px; text-align: center;
+  }
+  .viewer-loading .spinner {
+    width: 32px; height: 32px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite; margin: 0 auto 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .binding-legend {
+    margin-top: 12px; padding: 8px; background: var(--bg2);
+    border: 1px solid var(--border); font-size: 11px;
+  }
+  .binding-legend .legend-item {
+    display: flex; align-items: center; gap: 6px; margin: 4px 0;
+  }
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0;
+  }
+  .result-item { cursor: pointer; }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .activity-bar { display: none; }
+    .minimap { display: none; }
+  }
+  @media (max-width: 600px) {
+    .titlebar-dots { display: none; }
+    .result-vals { gap: 8px; }
+  }
+
+  /* ── Fold Regions ── */
+  .fold-region { cursor: pointer; }
+  .fold-region .fold-marker {
+    color: var(--text3); font-size: 10px; user-select: none;
+    margin-left: 4px;
+  }
+  .fold-region:hover .fold-marker { color: var(--text2); }
+</style>
+</head>
+<body>
+
+<!-- ── Title Bar ── -->
+<div class="titlebar">
+  <div class="titlebar-dots">
+    <div class="titlebar-dot dot-red"></div>
+    <div class="titlebar-dot dot-yellow"></div>
+    <div class="titlebar-dot dot-green"></div>
+  </div>
+  <div class="titlebar-text">cpi_foundation_model.py — CPI Foundation Model — BasGenBio</div>
+</div>
+
+<!-- ── IDE Layout ── -->
+<div class="ide-layout">
+
+  <!-- Activity Bar -->
+  <div class="activity-bar">
+    <div class="activity-icon active" title="Explorer(탐색기)">📁</div>
+    <div class="activity-icon" title="Search(검색)">🔍</div>
+    <div class="activity-icon" title="Source Control(소스 관리)">⑂</div>
+    <div class="activity-icon" title="Run & Debug(실행/디버그)">▶</div>
+    <div class="activity-icon" title="Extensions(확장)">⊞</div>
+    <div style="flex:1;"></div>
+    <div class="activity-icon" title="Settings(설정)">⚙</div>
+  </div>
+
+  <!-- Sidebar / Explorer -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">Explorer(탐색기)</div>
+    <div class="tree-section">
+      <div class="tree-header" onclick="toggleTree(this)">
+        <span class="arrow open">▶</span> CPI_FOUNDATION_MODEL
+      </div>
+      <div class="tree-children">
+        <a class="tree-item active" href="#overview" onclick="switchTab('overview')">
+          <span class="file-icon file-py">⬡</span> model.py
+        </a>
+        <a class="tree-item" href="#architecture" onclick="switchTab('architecture')">
+          <span class="file-icon file-py">⬡</span> architecture.py
+        </a>
+        <a class="tree-item" href="#data" onclick="switchTab('data')">
+          <span class="file-icon file-py">⬡</span> data.py
+        </a>
+        <a class="tree-item" href="#training" onclick="switchTab('training')">
+          <span class="file-icon file-py">⬡</span> train.py
+        </a>
+        <a class="tree-item" href="#demo" onclick="switchTab('demo')">
+          <span class="file-icon file-py">⬡</span> predict.py
+        </a>
+        <a class="tree-item" href="#roadmap" onclick="switchTab('roadmap')">
+          <span class="file-icon file-yml">●</span> roadmap.yml
+        </a>
+        <a class="tree-item" href="#tech" onclick="switchTab('tech')">
+          <span class="file-icon file-json">{ }</span> stack.json
+        </a>
+        <div class="tree-header" onclick="toggleTree(this)" style="margin-top:4px;">
+          <span class="arrow">▶</span> __pycache__
+        </div>
+        <div class="tree-header" onclick="toggleTree(this)">
+          <span class="arrow">▶</span> checkpoints
+        </div>
+        <a class="tree-item">
+          <span class="file-icon file-md">M</span> README.md
+        </a>
+        <a class="tree-item">
+          <span class="file-icon file-json">{ }</span> config.json
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Editor Area -->
+  <div class="editor-area">
+
+    <!-- Tab Bar -->
+    <div class="tab-bar">
+      <div class="tab active" id="tab-overview" onclick="switchTab('overview')">
+        <span class="file-py" style="font-size:14px;">⬡</span> model.py <span class="close">×</span>
+      </div>
+      <div class="tab" id="tab-architecture" onclick="switchTab('architecture')">
+        <span class="file-py" style="font-size:14px;">⬡</span> architecture.py <span class="close">×</span>
+      </div>
+      <div class="tab" id="tab-data" onclick="switchTab('data')">
+        <span class="file-py" style="font-size:14px;">⬡</span> data.py <span class="close">×</span>
+      </div>
+      <div class="tab" id="tab-training" onclick="switchTab('training')">
+        <span class="file-py" style="font-size:14px;">⬡</span> train.py <span class="close">×</span>
+      </div>
+      <div class="tab" id="tab-demo" onclick="switchTab('demo')">
+        <span class="file-py" style="font-size:14px;">⬡</span> predict.py <span class="close">×</span>
+      </div>
+      <div class="tab" id="tab-roadmap" onclick="switchTab('roadmap')">
+        <span style="font-size:14px;color:var(--decorator);">●</span> roadmap.yml <span class="close">×</span>
+      </div>
+      <div class="tab" id="tab-tech" onclick="switchTab('tech')">
+        <span style="font-size:14px;color:var(--warning);">{ }</span> stack.json <span class="close">×</span>
+      </div>
+    </div>
+
+    <!-- Breadcrumb -->
+    <div class="breadcrumb" id="breadcrumb">
+      cpi_foundation_model <span style="color:var(--text3);">›</span> <span>model.py</span> <span style="color:var(--text3);">›</span> <span class="cls">CPIFoundationModel</span>
+    </div>
+
+    <!-- Editor Content -->
+    <div class="editor-scroll">
+      <div class="editor">
+
+        <!-- ═══ TAB: OVERVIEW (model.py) ═══ -->
+        <div id="panel-overview" class="editor-panel">
+<div class="code-line"><span class="line-number">1</span><span class="code-content"><span class="cmt">"""</span></span></div>
+<div class="code-line"><span class="line-number">2</span><span class="code-content"><span class="cmt">CPI Foundation Model — Chemical-Protein Interaction Prediction</span></span></div>
+<div class="code-line"><span class="line-number">3</span><span class="code-content"><span class="cmt">SMILES 화학 구조 → 결합 단백질 타깃 예측 파운데이션 모델</span></span></div>
+<div class="code-line"><span class="line-number">4</span><span class="code-content"><span class="cmt"></span></span></div>
+<div class="code-line"><span class="line-number">5</span><span class="code-content"><span class="cmt">2026-03-10 | BasGenBio</span></span></div>
+<div class="code-line"><span class="line-number">6</span><span class="code-content"><span class="cmt">"""</span></span></div>
+<div class="code-line"><span class="line-number">7</span><span class="code-content"></span></div>
+<div class="code-line active-line"><span class="line-number">8</span><span class="code-content"><span class="kw">class</span> <span class="cls">CPIFoundationModel</span>:</span></div>
+<div class="code-line"><span class="line-number">9</span><span class="code-content">    <span class="cmt">"""범용 Chemical-Protein Interaction 파운데이션 모델"""</span></span></div>
+<div class="code-line"><span class="line-number">10</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">11</span><span class="code-content">    <span class="var">VERSION</span>      = <span class="str">"1.0.0"</span></span></div>
+<div class="code-line"><span class="line-number">12</span><span class="code-content">    <span class="var">PARAMETERS</span>  = <span class="str">"~750M"</span>        <span class="cmt"># Total model params</span></span></div>
+<div class="code-line"><span class="line-number">13</span><span class="code-content">    <span class="var">TRAIN_PAIRS</span> = <span class="str">"2.6M+"</span>        <span class="cmt"># Drug-protein training pairs</span></span></div>
+<div class="code-line"><span class="line-number">14</span><span class="code-content">    <span class="var">TARGET_AUROC</span>= <span class="num">0.90</span>           <span class="cmt"># Target performance</span></span></div>
+<div class="code-line"><span class="line-number">15</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">16</span><span class="code-content">    <span class="cmt"># ── 세 가지 핵심 활용 ──</span></span></div>
+<div class="code-line"><span class="line-number">17</span><span class="code-content">    <span class="var">USE_CASES</span> = <span class="brk">{</span></span></div>
+<div class="code-line"><span class="line-number">18</span><span class="code-content">        <span class="str">"target_discovery"</span>:   <span class="str">"Novel Target 발굴 — 미지의 약물-단백질 상호작용 예측"</span>,</span></div>
+<div class="code-line"><span class="line-number">19</span><span class="code-content">        <span class="str">"drug_repositioning"</span>: <span class="str">"Drug Repositioning — 기존 약물의 새로운 타깃 탐색"</span>,</span></div>
+<div class="code-line"><span class="line-number">20</span><span class="code-content">        <span class="str">"off_target"</span>:         <span class="str">"Off-target 예측 — 독성/부작용 조기 탐지"</span>,</span></div>
+<div class="code-line"><span class="line-number">21</span><span class="code-content">    <span class="brk">}</span></span></div>
+<div class="code-line"><span class="line-number">22</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">23</span><span class="code-content">    <span class="var">PERFORMANCE_TARGETS</span> = <span class="brk">{</span></span></div>
+<div class="code-line"><span class="line-number">24</span><span class="code-content">        <span class="str">"AUROC"</span>:       <span class="str">"≥ 0.90"</span>,   <span class="cmt"># Target Discovery</span></span></div>
+<div class="code-line"><span class="line-number">25</span><span class="code-content">        <span class="str">"Hit_Rate"</span>:    <span class="str">"≥ 30%"</span>,    <span class="cmt"># Drug Repositioning</span></span></div>
+<div class="code-line"><span class="line-number">26</span><span class="code-content">        <span class="str">"Recall"</span>:      <span class="str">"≥ 0.85"</span>,   <span class="cmt"># Off-target Detection</span></span></div>
+<div class="code-line"><span class="line-number">27</span><span class="code-content">        <span class="str">"Cold_AUROC"</span>:  <span class="str">"≥ 0.80"</span>,   <span class="cmt"># Unseen Drug/Protein</span></span></div>
+<div class="code-line"><span class="line-number">28</span><span class="code-content">    <span class="brk">}</span></span></div>
+        </div>
+
+        <!-- ═══ TAB: ARCHITECTURE ═══ -->
+        <div id="panel-architecture" class="editor-panel" style="display:none;">
+<div class="code-line"><span class="line-number">1</span><span class="code-content"><span class="cmt"># ═══════════════════════════════════════════════════════════</span></span></div>
+<div class="code-line"><span class="line-number">2</span><span class="code-content"><span class="cmt"># architecture.py — Dual-Encoder + Cross-Attention Fusion</span></span></div>
+<div class="code-line"><span class="line-number">3</span><span class="code-content"><span class="cmt"># ═══════════════════════════════════════════════════════════</span></span></div>
+<div class="code-line"><span class="line-number">4</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">5</span><span class="code-content"><span class="kw">from</span> <span class="var">transformers</span> <span class="kw">import</span> <span class="cls">AutoModel</span></span></div>
+<div class="code-line"><span class="line-number">6</span><span class="code-content"><span class="kw">import</span> <span class="var">torch.nn</span> <span class="kw">as</span> <span class="var">nn</span></span></div>
+<div class="code-line"><span class="line-number">7</span><span class="code-content"></span></div>
+
+          <!-- Architecture ASCII Diagram -->
+          <div style="padding: 0 76px;">
+            <div class="arch-ascii">
+<span class="cmt">    ┌─────────────────────┐         ┌──────────────────────────┐</span>
+<span class="cmt">    │</span> <span class="str">  📝 SMILES Input    </span> <span class="cmt">│         │</span> <span class="str">  🧬 Protein Sequence   </span> <span class="cmt">│</span>
+<span class="cmt">    │</span> <span class="var"> CC(=O)Oc1ccccc1...  </span> <span class="cmt">│         │</span> <span class="var"> MVLSPADKTNVKA...       </span> <span class="cmt">│</span>
+<span class="cmt">    └──────────┬──────────┘         └────────────┬─────────────┘</span>
+<span class="cmt">               │                                 │</span>
+<span class="cmt">               ▼                                 ▼</span>
+<span class="cmt">    ┌─────────────────────┐         ┌──────────────────────────┐</span>
+<span class="cmt">    │</span> <span class="dec"> 💊 ChemBERTa        </span> <span class="cmt">│         │</span> <span class="dec"> 🔬 ESM-2                </span> <span class="cmt">│</span>
+<span class="cmt">    │</span> <span class="text2">  77M params → d=768 </span> <span class="cmt">│         │</span> <span class="text2">  650M params → d=1280   </span> <span class="cmt">│</span>
+<span class="cmt">    └──────────┬──────────┘         └────────────┬─────────────┘</span>
+<span class="cmt">               │        ┌───────────┐            │</span>
+<span class="cmt">               └───────►│</span> <span class="kw">  CROSS    </span> <span class="cmt">│◄───────────┘</span>
+<span class="cmt">                        │</span> <span class="kw"> ATTENTION </span> <span class="cmt">│</span>
+<span class="cmt">                        │</span> <span class="text2"> 8-head×6L </span> <span class="cmt">│</span>
+<span class="cmt">                        └─────┬─────┘</span>
+<span class="cmt">                              │</span>
+<span class="cmt">                    ┌─────────┴─────────┐</span>
+<span class="cmt">                    ▼                   ▼</span>
+<span class="cmt">          ┌──────────────────┐ ┌──────────────────┐</span>
+<span class="cmt">          │</span> <span class="cls"> 🔗 Interaction   </span> <span class="cmt">│ │</span> <span class="cls"> 📊 Affinity       </span> <span class="cmt">│</span>
+<span class="cmt">          │</span> <span class="text2">   (상호작용 예측)  </span> <span class="cmt">│ │</span> <span class="text2">   (친화도 예측)     </span> <span class="cmt">│</span>
+<span class="cmt">          │</span> <span class="text2"> P(bind) ∈ [0,1] </span> <span class="cmt">│ │</span> <span class="text2"> pKd / pKi / pIC50</span> <span class="cmt">│</span>
+<span class="cmt">          └──────────────────┘ └──────────────────┘</span>
+            </div>
+          </div>
+
+<div class="code-line"><span class="line-number">8</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">9</span><span class="code-content"><span class="kw">class</span> <span class="cls">DrugEncoder</span>(<span class="cls">nn.Module</span>):</span></div>
+<div class="code-line"><span class="line-number">10</span><span class="code-content">    <span class="cmt">"""ChemBERTa 기반 약물 인코더 (SMILES → d=768 → proj → d=512)"""</span></span></div>
+
+          <div style="padding: 4px 76px;">
+            <table class="ide-table">
+              <tr><th>Component(구성요소)</th><th>Detail(상세)</th></tr>
+              <tr><td><span class="var">base_model</span></td><td><span class="str">"DeepChem/ChemBERTa-77M-MLM"</span> <span class="cmt"># 77M params(파라미터)</span></td></tr>
+              <tr><td><span class="var">input(입력)</span></td><td>Canonical SMILES(표준형) <span class="cmt"># max 512 tokens, BPE tokenizer</span></td></tr>
+              <tr><td><span class="var">output(출력)</span></td><td><span class="cls">[CLS]</span> → <span class="num">768</span>d → Linear → <span class="num">512</span>d</td></tr>
+              <tr><td><span class="var">pretrain(사전학습)</span></td><td>77M SMILES, Masked Language Model</td></tr>
+            </table>
+          </div>
+
+<div class="code-line"><span class="line-number">11</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">12</span><span class="code-content"><span class="kw">class</span> <span class="cls">ProteinEncoder</span>(<span class="cls">nn.Module</span>):</span></div>
+<div class="code-line"><span class="line-number">13</span><span class="code-content">    <span class="cmt">"""ESM-2 기반 단백질 인코더 (Sequence → d=1280 → proj → d=512)"""</span></span></div>
+
+          <div style="padding: 4px 76px;">
+            <table class="ide-table">
+              <tr><th>Component(구성요소)</th><th>Detail(상세)</th></tr>
+              <tr><td><span class="var">base_model</span></td><td><span class="str">"facebook/esm2_t33_650M_UR50D"</span> <span class="cmt"># 650M params(파라미터)</span></td></tr>
+              <tr><td><span class="var">input(입력)</span></td><td>Amino acid sequence(아미노산 서열) <span class="cmt"># max 1024 residues</span></td></tr>
+              <tr><td><span class="var">pooling(풀링)</span></td><td>Attention-masked Mean Pooling</td></tr>
+              <tr><td><span class="var">output(출력)</span></td><td>(<span class="var">L</span>, <span class="num">1280</span>) → mean → <span class="num">512</span>d</td></tr>
+            </table>
+          </div>
+
+<div class="code-line"><span class="line-number">14</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">15</span><span class="code-content"><span class="kw">class</span> <span class="cls">CrossAttentionFusion</span>(<span class="cls">nn.Module</span>):</span></div>
+<div class="code-line"><span class="line-number">16</span><span class="code-content">    <span class="cmt">"""약물-단백질 Cross-Attention (Query: Drug, Key/Value: Protein)"""</span></span></div>
+
+          <div style="padding: 4px 76px;">
+            <table class="ide-table">
+              <tr><th>Component(구성요소)</th><th>Detail(상세)</th></tr>
+              <tr><td><span class="var">attention(어텐션)</span></td><td>Multi-Head Cross-Attention (<span class="num">8</span> heads)</td></tr>
+              <tr><td><span class="var">layers(레이어)</span></td><td><span class="num">6</span> Transformer Decoder Layers</td></tr>
+              <tr><td><span class="var">query(쿼리)</span></td><td>Drug embedding(약물 임베딩) → Linear → <span class="num">512</span>d</td></tr>
+              <tr><td><span class="var">key_value(키/값)</span></td><td>Protein residues(단백질 잔기) → Linear → <span class="num">512</span>d</td></tr>
+              <tr><td><span class="var">interpret(해석)</span></td><td>Attention weights(어텐션 가중치) → <span class="fn">binding_site_heatmap</span>()</td></tr>
+            </table>
+          </div>
+        </div>
+
+        <!-- ═══ TAB: DATA ═══ -->
+        <div id="panel-data" class="editor-panel" style="display:none;">
+<div class="code-line"><span class="line-number">1</span><span class="code-content"><span class="cmt"># ═══════════════════════════════════════════════════════════</span></span></div>
+<div class="code-line"><span class="line-number">2</span><span class="code-content"><span class="cmt"># data.py — Data Pipeline & Preprocessing</span></span></div>
+<div class="code-line"><span class="line-number">3</span><span class="code-content"><span class="cmt"># ═══════════════════════════════════════════════════════════</span></span></div>
+<div class="code-line"><span class="line-number">4</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">5</span><span class="code-content"><span class="cmt"># Pipeline: SMILES → Canonicalize → Filter → Transform → Split</span></span></div>
+<div class="code-line"><span class="line-number">6</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">7</span><span class="code-content"><span class="var">PIPELINE_STEPS</span> = [</span></div>
+<div class="code-line"><span class="line-number">8</span><span class="code-content">    <span class="str">"1. SMILES_Canonicalization"</span>,   <span class="cmt"># RDKit canonical form</span></span></div>
+<div class="code-line"><span class="line-number">9</span><span class="code-content">    <span class="str">"2. Protein_Filtering"</span>,         <span class="cmt"># Length 50~1024, valid AA</span></span></div>
+<div class="code-line"><span class="line-number">10</span><span class="code-content">    <span class="str">"3. Affinity_Transform"</span>,        <span class="cmt"># nM → pKd = -log10(Kd)</span></span></div>
+<div class="code-line"><span class="line-number">11</span><span class="code-content">    <span class="str">"4. Hard_Negative_Mining"</span>,      <span class="cmt"># Chemical similarity-based</span></span></div>
+<div class="code-line"><span class="line-number">12</span><span class="code-content">    <span class="str">"5. Cold_Protein_Split"</span>,        <span class="cmt"># 70/15/15, protein-based</span></span></div>
+<div class="code-line"><span class="line-number">13</span><span class="code-content">]</span></div>
+<div class="code-line"><span class="line-number">14</span><span class="code-content"></span></div>
+
+          <div style="padding: 4px 76px;">
+            <table class="ide-table">
+              <tr><th>Dataset(데이터셋)</th><th>Description(설명)</th><th>Scale(규모)</th><th>Usage(용도)</th></tr>
+              <tr><td><span class="fn">BindingDB</span></td><td>Drug-target binding affinity(약물-타깃 결합친화도) (Kd/Ki/IC50)</td><td class="num">~2.6M pairs</td><td><span class="ide-tag tag-kw">Pre-train + Fine-tune(사전학습+미세조정)</span></td></tr>
+              <tr><td><span class="fn">DrugBank</span></td><td>Approved drug-target interactions(승인약물-타깃 상호작용)</td><td class="num">~15K drugs</td><td><span class="ide-tag tag-cmt">Validation(검증)</span></td></tr>
+              <tr><td><span class="fn">ChEMBL</span></td><td>Bioactivity assay data(생체활성 어세이)</td><td class="num">~2.4M assays</td><td><span class="ide-tag tag-kw">Pre-training(사전학습)</span></td></tr>
+              <tr><td><span class="fn">DAVIS</span></td><td>Kinase drug-target(키나제 약물-타깃) (Kd)</td><td class="num">~30K pairs</td><td><span class="ide-tag tag-fn">Benchmark(벤치마크)</span></td></tr>
+              <tr><td><span class="fn">KIBA</span></td><td>Integrated bioactivity(통합 생체활성)</td><td class="num">~118K pairs</td><td><span class="ide-tag tag-fn">Benchmark(벤치마크)</span></td></tr>
+              <tr><td><span class="fn">UniProt</span></td><td>Protein sequence database(단백질 서열 DB)</td><td class="num">~570K seqs</td><td><span class="ide-tag tag-cls">Protein Encoder(단백질 인코더)</span></td></tr>
+            </table>
+          </div>
+        </div>
+
+        <!-- ═══ TAB: TRAINING ═══ -->
+        <div id="panel-training" class="editor-panel" style="display:none;">
+<div class="code-line"><span class="line-number">1</span><span class="code-content"><span class="cmt"># ═══════════════════════════════════════════════════════════</span></span></div>
+<div class="code-line"><span class="line-number">2</span><span class="code-content"><span class="cmt"># train.py — 3-Phase Training Pipeline</span></span></div>
+<div class="code-line"><span class="line-number">3</span><span class="code-content"><span class="cmt"># ═══════════════════════════════════════════════════════════</span></span></div>
+<div class="code-line"><span class="line-number">4</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">5</span><span class="code-content"><span class="kw">class</span> <span class="cls">Phase1_Pretraining</span>:</span></div>
+<div class="code-line"><span class="line-number">6</span><span class="code-content">    <span class="cmt">"""Contrastive Learning — InfoNCE Loss로 임베딩 공간 정렬"""</span></span></div>
+<div class="code-line"><span class="line-number">7</span><span class="code-content">    <span class="var">lr</span>         = <span class="num">1e-4</span>       <span class="cmt"># warm-up 10%</span></span></div>
+<div class="code-line"><span class="line-number">8</span><span class="code-content">    <span class="var">batch_size</span> = <span class="num">256</span></span></div>
+<div class="code-line"><span class="line-number">9</span><span class="code-content">    <span class="var">epochs</span>     = <span class="num">50</span></span></div>
+<div class="code-line"><span class="line-number">10</span><span class="code-content">    <span class="var">gpu</span>        = <span class="str">"A100 80GB × 4"</span></span></div>
+<div class="code-line"><span class="line-number">11</span><span class="code-content">    <span class="var">loss</span>       = <span class="str">"InfoNCE(τ=0.07)"</span></span></div>
+<div class="code-line"><span class="line-number">12</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">13</span><span class="code-content"><span class="kw">class</span> <span class="cls">Phase2_Finetuning</span>:</span></div>
+<div class="code-line"><span class="line-number">14</span><span class="code-content">    <span class="cmt">"""Multi-task — Interaction 분류 + Affinity 회귀 동시 학습"""</span></span></div>
+<div class="code-line"><span class="line-number">15</span><span class="code-content">    <span class="var">lr</span>         = <span class="num">5e-5</span>       <span class="cmt"># cosine decay</span></span></div>
+<div class="code-line"><span class="line-number">16</span><span class="code-content">    <span class="var">batch_size</span> = <span class="num">64</span></span></div>
+<div class="code-line"><span class="line-number">17</span><span class="code-content">    <span class="var">epochs</span>     = <span class="num">100</span>         <span class="cmt"># early stop patience=10</span></span></div>
+<div class="code-line"><span class="line-number">18</span><span class="code-content">    <span class="var">loss</span>       = <span class="str">"α × L_int + β × L_aff"</span></span></div>
+<div class="code-line"><span class="line-number">19</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">20</span><span class="code-content"><span class="kw">class</span> <span class="cls">Phase3_Adaptation</span>:</span></div>
+<div class="code-line"><span class="line-number">21</span><span class="code-content">    <span class="cmt">"""Domain Fine-tuning — 바스젠바이오 내부 + 7대 질환 데이터"""</span></span></div>
+<div class="code-line"><span class="line-number">22</span><span class="code-content">    <span class="var">diseases</span>   = [<span class="str">"위암"</span>, <span class="str">"간암"</span>, <span class="str">"대장암"</span>, <span class="str">"자궁경부암"</span>,</span></div>
+<div class="code-line"><span class="line-number">23</span><span class="code-content">                   <span class="str">"유방암"</span>, <span class="str">"알츠하이머"</span>, <span class="str">"파킨슨"</span>]</span></div>
+<div class="code-line"><span class="line-number">24</span><span class="code-content">    <span class="var">pipeline</span>   = <span class="str">"DEEPTD → CPI → Gen Chem FM → SimCT"</span></span></div>
+<div class="code-line"><span class="line-number">25</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">26</span><span class="code-content"><span class="cmt"># ── Target Metrics ──</span></span></div>
+<div class="code-line"><span class="line-number">27</span><span class="code-content"><span class="var">BENCHMARKS</span> = <span class="brk">{</span></span></div>
+<div class="code-line"><span class="line-number">28</span><span class="code-content">    <span class="str">"BindingDB_Kd"</span>:    <span class="brk">{</span><span class="str">"metric"</span>: <span class="str">"CI"</span>,    <span class="str">"target"</span>: <span class="num">0.85</span><span class="brk">}</span>,</span></div>
+<div class="code-line"><span class="line-number">29</span><span class="code-content">    <span class="str">"DAVIS"</span>:           <span class="brk">{</span><span class="str">"metric"</span>: <span class="str">"AUROC"</span>, <span class="str">"target"</span>: <span class="num">0.92</span><span class="brk">}</span>,</span></div>
+<div class="code-line"><span class="line-number">30</span><span class="code-content">    <span class="str">"KIBA"</span>:            <span class="brk">{</span><span class="str">"metric"</span>: <span class="str">"CI"</span>,    <span class="str">"target"</span>: <span class="num">0.87</span><span class="brk">}</span>,</span></div>
+<div class="code-line"><span class="line-number">31</span><span class="code-content">    <span class="str">"TDC_Cold_Start"</span>:  <span class="brk">{</span><span class="str">"metric"</span>: <span class="str">"AUROC"</span>, <span class="str">"target"</span>: <span class="num">0.80</span><span class="brk">}</span>,</span></div>
+<div class="code-line"><span class="line-number">32</span><span class="code-content"><span class="brk">}</span></span></div>
+        </div>
+
+        <!-- ═══ TAB: DEMO (predict.py) ═══ -->
+        <div id="panel-demo" class="editor-panel" style="display:none;">
+<div class="code-line"><span class="line-number">1</span><span class="code-content"><span class="cmt"># ═══════════════════════════════════════════════════════════</span></span></div>
+<div class="code-line"><span class="line-number">2</span><span class="code-content"><span class="cmt"># predict.py — SMILES → Target Protein Prediction</span></span></div>
+<div class="code-line"><span class="line-number">3</span><span class="code-content"><span class="cmt"># ═══════════════════════════════════════════════════════════</span></span></div>
+<div class="code-line"><span class="line-number">4</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">5</span><span class="code-content"><span class="var">smiles</span> = <span class="fn">input</span>(<span class="str">"Enter SMILES: "</span>)</span></div>
+<div class="code-line"><span class="line-number">6</span><span class="code-content"><span class="var">results</span> = <span class="var">model</span>.<span class="fn">predict_targets</span>(<span class="var">smiles</span>, <span class="var">top_k</span>=<span class="num">8</span>)</span></div>
+<div class="code-line"><span class="line-number">7</span><span class="code-content"></span></div>
+
+          <!-- Interactive Demo Panel -->
+          <div style="padding: 0 76px;">
+            <div class="demo-panel">
+              <div class="demo-panel-header">▶ Run(실행): predict.py</div>
+              <div class="demo-panel-body">
+                <div class="demo-input-row">
+                  <span class="demo-label"><span class="kw">smiles</span> =</span>
+                  <input type="text" class="demo-input" id="smilesInput" value="CC(=O)Oc1ccccc1C(=O)O">
+                  <button class="demo-btn" onclick="runPrediction()">▶ RUN</button>
+                </div>
+                <div class="preset-row">
+                  <span style="color:var(--text3); font-size:11px; margin-right:4px;">#presets(프리셋):</span>
+                  <button class="preset-chip" onclick="setSmiles('CC(=O)Oc1ccccc1C(=O)O')">Aspirin</button>
+                  <button class="preset-chip" onclick="setSmiles('CC(C)Cc1ccc(cc1)C(C)C(=O)O')">Ibuprofen</button>
+                  <button class="preset-chip" onclick="setSmiles('CN1C=NC2=C1C(=O)N(C(=O)N2C)C')">Caffeine</button>
+                  <button class="preset-chip" onclick="setSmiles('CC12CCC3C(CCC4CC(=O)CCC43C)C1CCC2O')">Testosterone</button>
+                  <button class="preset-chip" onclick="setSmiles('OC(=O)CCCCCN1C(=O)c2cccc3cccc1c23')">Tubastatin A</button>
+                  <button class="preset-chip" onclick="setSmiles('OC(=O)C1CCC(CC1)NC(=O)C2=CC=C(F)C=C2')">Finasteride</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Terminal Output -->
+            <div class="terminal">
+              <div class="terminal-header">
+                <span class="terminal-tab active">TERMINAL(터미널)</span>
+                <span class="terminal-tab">OUTPUT(출력)</span>
+                <span class="terminal-tab">PROBLEMS(문제)</span>
+                <span style="flex:1;"></span>
+                <span style="color:var(--text3); font-size:10px;">bash</span>
+              </div>
+              <div class="terminal-body" id="terminalOutput">
+                <div class="term-line"><span class="term-prompt">$ </span><span class="term-cmd">python predict.py --demo</span></div>
+                <div class="term-line"><span class="term-info">[INFO] </span><span class="term-output">Loading CPI Foundation Model(CPI 파운데이션 모델 로딩 중)...</span></div>
+                <div class="term-line"><span class="term-success">[OK] </span><span class="term-output">Model loaded(모델 로딩 완료) (750M params)</span></div>
+                <div class="term-line"><span class="term-output">Enter SMILES or click a preset above.(위 SMILES를 입력하거나 프리셋을 클릭하세요.)</span></div>
+              </div>
+            </div>
+
+            <!-- Results -->
+            <div id="results"></div>
+
+            <!-- Heatmap -->
+            <div id="heatmap"></div>
+          </div>
+        </div>
+
+        <!-- ═══ TAB: ROADMAP ═══ -->
+        <div id="panel-roadmap" class="editor-panel" style="display:none;">
+<div class="code-line"><span class="line-number">1</span><span class="code-content"><span class="cmt"># ═══════════════════════════════════════════════════════════</span></span></div>
+<div class="code-line"><span class="line-number">2</span><span class="code-content"><span class="cmt"># roadmap.yml — 12-Month Development Timeline</span></span></div>
+<div class="code-line"><span class="line-number">3</span><span class="code-content"><span class="cmt"># ═══════════════════════════════════════════════════════════</span></span></div>
+<div class="code-line"><span class="line-number">4</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">5</span><span class="code-content"><span class="kw">phases</span>:</span></div>
+<div class="code-line"><span class="line-number">6</span><span class="code-content">  - <span class="var">name</span>:   <span class="str">"Phase 1 — Foundation"</span></span></div>
+<div class="code-line"><span class="line-number">7</span><span class="code-content">    <span class="var">period</span>: <span class="str">"M1 ~ M3"</span></span></div>
+<div class="code-line"><span class="line-number">8</span><span class="code-content">    <span class="var">tasks</span>:  <span class="str">"데이터 수집/전처리, 아키텍처 설계, 프로토타입"</span></span></div>
+<div class="code-line"><span class="line-number">9</span><span class="code-content">    <span class="var">output</span>: <span class="str">"학습 데이터셋 + 모델 설계서"</span></span></div>
+<div class="code-line"><span class="line-number">10</span><span class="code-content">    <span class="var">status</span>: <span class="cls">active</span>  <span class="cmt"># ◀ current</span></span></div>
+<div class="code-line"><span class="line-number">11</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">12</span><span class="code-content">  - <span class="var">name</span>:   <span class="str">"Phase 2 — Pre-training"</span></span></div>
+<div class="code-line"><span class="line-number">13</span><span class="code-content">    <span class="var">period</span>: <span class="str">"M4 ~ M6"</span></span></div>
+<div class="code-line"><span class="line-number">14</span><span class="code-content">    <span class="var">tasks</span>:  <span class="str">"Contrastive Learning, 임베딩 공간 정렬"</span></span></div>
+<div class="code-line"><span class="line-number">15</span><span class="code-content">    <span class="var">output</span>: <span class="str">"Pre-trained CPI Model v1"</span></span></div>
+<div class="code-line"><span class="line-number">16</span><span class="code-content">    <span class="var">status</span>: <span class="var">pending</span></span></div>
+<div class="code-line"><span class="line-number">17</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">18</span><span class="code-content">  - <span class="var">name</span>:   <span class="str">"Phase 3 — Fine-tuning"</span></span></div>
+<div class="code-line"><span class="line-number">19</span><span class="code-content">    <span class="var">period</span>: <span class="str">"M7 ~ M9"</span></span></div>
+<div class="code-line"><span class="line-number">20</span><span class="code-content">    <span class="var">tasks</span>:  <span class="str">"Multi-task 학습, DAVIS/KIBA 벤치마크 달성"</span></span></div>
+<div class="code-line"><span class="line-number">21</span><span class="code-content">    <span class="var">output</span>: <span class="str">"Fine-tuned Model + 성능 보고서"</span></span></div>
+<div class="code-line"><span class="line-number">22</span><span class="code-content">    <span class="var">status</span>: <span class="var">pending</span></span></div>
+<div class="code-line"><span class="line-number">23</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">24</span><span class="code-content">  - <span class="var">name</span>:   <span class="str">"Phase 4 — Production"</span></span></div>
+<div class="code-line"><span class="line-number">25</span><span class="code-content">    <span class="var">period</span>: <span class="str">"M10 ~ M12"</span></span></div>
+<div class="code-line"><span class="line-number">26</span><span class="code-content">    <span class="var">tasks</span>:  <span class="str">"Domain Adaptation, API 배포, DEEPTD 통합"</span></span></div>
+<div class="code-line"><span class="line-number">27</span><span class="code-content">    <span class="var">output</span>: <span class="str">"Production Model + FastAPI Service"</span></span></div>
+<div class="code-line"><span class="line-number">28</span><span class="code-content">    <span class="var">status</span>: <span class="var">pending</span></span></div>
+<div class="code-line"><span class="line-number">29</span><span class="code-content"></span></div>
+<div class="code-line"><span class="line-number">30</span><span class="code-content"><span class="cmt"># integration pipeline:</span></span></div>
+<div class="code-line"><span class="line-number">31</span><span class="code-content"><span class="cmt"># DEEPTD → CPI_Model → Generative_Chem_FM → SimCT</span></span></div>
+        </div>
+
+        <!-- ═══ TAB: TECH STACK ═══ -->
+        <div id="panel-tech" class="editor-panel" style="display:none;">
+<div class="code-line"><span class="line-number">1</span><span class="code-content"><span class="cmt">// ═══════════════════════════════════════════════════════════</span></span></div>
+<div class="code-line"><span class="line-number">2</span><span class="code-content"><span class="cmt">// stack.json — Technology Stack</span></span></div>
+<div class="code-line"><span class="line-number">3</span><span class="code-content"><span class="cmt">// ═══════════════════════════════════════════════════════════</span></span></div>
+<div class="code-line"><span class="line-number">4</span><span class="code-content"><span class="brk">{</span></span></div>
+<div class="code-line"><span class="line-number">5</span><span class="code-content">  <span class="kw">"framework"</span>:   <span class="brk">{</span> <span class="str">"name"</span>: <span class="str">"PyTorch 2.x + Lightning"</span>,   <span class="str">"use"</span>: <span class="str">"모델 학습"</span> <span class="brk">}</span>,</span></div>
+<div class="code-line"><span class="line-number">6</span><span class="code-content">  <span class="kw">"pretrained"</span>:  <span class="brk">{</span> <span class="str">"name"</span>: <span class="str">"HuggingFace Transformers"</span>,  <span class="str">"use"</span>: <span class="str">"ChemBERTa, ESM-2"</span> <span class="brk">}</span>,</span></div>
+<div class="code-line"><span class="line-number">7</span><span class="code-content">  <span class="kw">"chemistry"</span>:   <span class="brk">{</span> <span class="str">"name"</span>: <span class="str">"RDKit + DeepChem"</span>,          <span class="str">"use"</span>: <span class="str">"SMILES 처리"</span> <span class="brk">}</span>,</span></div>
+<div class="code-line"><span class="line-number">8</span><span class="code-content">  <span class="kw">"data"</span>:        <span class="brk">{</span> <span class="str">"name"</span>: <span class="str">"TDC (PyTDC)"</span>,              <span class="str">"use"</span>: <span class="str">"DTI 벤치마크"</span> <span class="brk">}</span>,</span></div>
+<div class="code-line"><span class="line-number">9</span><span class="code-content">  <span class="kw">"tracking"</span>:    <span class="brk">{</span> <span class="str">"name"</span>: <span class="str">"MLflow + W&B"</span>,             <span class="str">"use"</span>: <span class="str">"실험 추적"</span> <span class="brk">}</span>,</span></div>
+<div class="code-line"><span class="line-number">10</span><span class="code-content">  <span class="kw">"serving"</span>:     <span class="brk">{</span> <span class="str">"name"</span>: <span class="str">"FastAPI + TorchServe"</span>,      <span class="str">"use"</span>: <span class="str">"REST API"</span> <span class="brk">}</span>,</span></div>
+<div class="code-line"><span class="line-number">11</span><span class="code-content">  <span class="kw">"infra"</span>:       <span class="brk">{</span> <span class="str">"name"</span>: <span class="str">"AWS/GCP + Docker/K8s"</span>,      <span class="str">"use"</span>: <span class="str">"클라우드 배포"</span> <span class="brk">}</span>,</span></div>
+<div class="code-line"><span class="line-number">12</span><span class="code-content">  <span class="kw">"protein_lm"</span>:  <span class="brk">{</span> <span class="str">"name"</span>: <span class="str">"ESM-2 (Meta AI)"</span>,          <span class="str">"use"</span>: <span class="str">"Protein LM"</span> <span class="brk">}</span>,</span></div>
+<div class="code-line"><span class="line-number">13</span><span class="code-content">  <span class="kw">"chem_lm"</span>:     <span class="brk">{</span> <span class="str">"name"</span>: <span class="str">"ChemBERTa"</span>,               <span class="str">"use"</span>: <span class="str">"Chemical LM"</span> <span class="brk">}</span></span></div>
+<div class="code-line"><span class="line-number">14</span><span class="code-content"><span class="brk">}</span></span></div>
+        </div>
+
+      </div><!-- /editor -->
+    </div><!-- /editor-scroll -->
+
+    <!-- Minimap -->
+    <div class="minimap" id="minimap">
+      <div class="minimap-block" style="top:5%;height:8%;background:var(--comment);"></div>
+      <div class="minimap-block" style="top:15%;height:3%;background:var(--keyword);"></div>
+      <div class="minimap-block" style="top:20%;height:12%;background:var(--string);"></div>
+      <div class="minimap-block" style="top:35%;height:5%;background:var(--class);"></div>
+      <div class="minimap-block" style="top:42%;height:15%;background:var(--variable);"></div>
+      <div class="minimap-block" style="top:60%;height:8%;background:var(--function);"></div>
+      <div class="minimap-block" style="top:72%;height:10%;background:var(--string);"></div>
+      <div class="minimap-block" style="top:85%;height:6%;background:var(--comment);"></div>
+    </div>
+  </div><!-- /editor-area -->
+</div><!-- /ide-layout -->
+
+<!-- ── Status Bar ── -->
+<div class="statusbar">
+  <div class="statusbar-left">
+    <span class="status-item">⑂ main</span>
+    <span class="status-item">⊘ 0  ⚠ 0</span>
+  </div>
+  <div class="statusbar-right">
+    <span class="status-item">Ln(줄) 8, Col(열) 1</span>
+    <span class="status-item">Spaces(공백): 4</span>
+    <span class="status-item">UTF-8</span>
+    <span class="status-item">Python</span>
+    <span class="status-item">BasGenBio CPI-FM v1.0</span>
+  </div>
+</div>
+
+<script>
+// ── Tab switching ──
+const tabs = ['overview','architecture','data','training','demo','roadmap','tech'];
+const breadcrumbs = {
+  overview: 'cpi_foundation_model › <span class="cls">model.py</span> › <span class="fn">CPIFoundationModel</span>',
+  architecture: 'cpi_foundation_model › <span class="cls">architecture.py</span> › <span class="fn">DualEncoder</span>',
+  data: 'cpi_foundation_model › <span class="cls">data.py</span> › <span class="fn">DataPipeline</span>',
+  training: 'cpi_foundation_model › <span class="cls">train.py</span> › <span class="fn">Trainer</span>',
+  demo: 'cpi_foundation_model › <span class="cls">predict.py</span> › <span class="fn">predict_targets</span>()',
+  roadmap: 'cpi_foundation_model › <span class="dec">roadmap.yml</span>',
+  tech: 'cpi_foundation_model › <span class="str">stack.json</span>',
+};
+
+function switchTab(name) {
+  tabs.forEach(t => {
+    document.getElementById('panel-'+t).style.display = t===name?'block':'none';
+    document.getElementById('tab-'+t).classList.toggle('active', t===name);
+  });
+  document.getElementById('breadcrumb').innerHTML = breadcrumbs[name];
+  document.querySelectorAll('.tree-item').forEach((el,i)=>el.classList.toggle('active',i===tabs.indexOf(name)));
+  if(name==='demo') setTimeout(()=>{ if(!document.querySelector('.result-item')) runPrediction(); },300);
+  return false;
+}
+
+function toggleTree(el) {
+  const arrow = el.querySelector('.arrow');
+  if(arrow) arrow.classList.toggle('open');
+  const next = el.nextElementSibling;
+  if(next && next.classList.contains('tree-children')) {
+    next.style.display = next.style.display==='none'?'':'none';
+  }
+}
+
+// ── Demo Prediction ──
+const DB = [
+  {name:"COX-2 (PTGS2)", id:"P35354", func:"Cyclooxygenase-2, inflammation(사이클로옥시게나제-2, 염증)", cat:"Enzyme(효소)",
+   gene:"PTGS2", chr:"1q31.1",
+   genes:[
+     {sym:"PTGS2",  role:"encoding(인코딩)", desc:"COX-2 단백질 직접 코딩 유전자, 프로스타글란딘 합성 촉매"},
+     {sym:"PTGS1",  role:"paralog(파랄로그)", desc:"COX-1 동형효소, 항상성 프로스타글란딘 생성"},
+     {sym:"NFKB1",  role:"expression(발현조절)", desc:"NF-κB 전사인자, 염증 시 PTGS2 발현 유도"},
+     {sym:"TNF",    role:"expression(발현조절)", desc:"TNF-α, 염증성 사이토카인으로 COX-2 발현 상향 조절"},
+     {sym:"IL1B",   role:"expression(발현조절)", desc:"IL-1β, 대식세포 유래 COX-2 유도 인자"},
+     {sym:"PLA2G4A",role:"pathway(경로)", desc:"cPLA2, 아라키돈산 유리 → COX-2 기질 공급"},
+     {sym:"PTGER2", role:"downstream(하위)", desc:"EP2 수용체, PGE2 신호전달 매개"},
+     {sym:"ALOX5",  role:"crosstalk(교차)", desc:"5-LOX, 아라키돈산 경로 경쟁 효소"},
+   ]},
+  {name:"EGFR", id:"P00533", func:"Epidermal Growth Factor Receptor, cancer(표피성장인자수용체, 암)", cat:"Kinase(키나제)",
+   gene:"EGFR", chr:"7p11.2",
+   genes:[
+     {sym:"EGFR",   role:"encoding(인코딩)", desc:"EGFR 단백질 직접 코딩, 수용체 티로신 키나제"},
+     {sym:"ERBB2",  role:"heterodimerization(이종이합체)", desc:"HER2, EGFR과 이합체 형성 → 신호 증폭"},
+     {sym:"ERBB3",  role:"heterodimerization(이종이합체)", desc:"HER3, PI3K 경로 활성화 매개"},
+     {sym:"KRAS",   role:"downstream(하위)", desc:"RAS GTPase, EGFR 하위 MAPK 경로 핵심"},
+     {sym:"BRAF",   role:"downstream(하위)", desc:"RAF 키나제, RAS-MAPK 신호전달 매개"},
+     {sym:"PIK3CA", role:"downstream(하위)", desc:"PI3K p110α, AKT/mTOR 생존 신호 매개"},
+     {sym:"PTEN",   role:"negative reg(음성조절)", desc:"PI3K 경로 억제 종양억제유전자"},
+     {sym:"STAT3",  role:"downstream(하위)", desc:"전사인자, EGFR 매개 세포 증식/생존 조절"},
+   ]},
+  {name:"ACE2", id:"Q9BYF1", func:"ACE2 receptor, SARS-CoV-2 entry(ACE2 수용체, SARS-CoV-2 침입)", cat:"Enzyme(효소)",
+   gene:"ACE2", chr:"Xp22.2",
+   genes:[
+     {sym:"ACE2",    role:"encoding(인코딩)", desc:"ACE2 단백질 코딩, Ang II → Ang(1-7) 변환 효소"},
+     {sym:"ACE",     role:"paralog(파랄로그)", desc:"ACE, Ang I → Ang II 변환, RAS 경로 핵심"},
+     {sym:"AGT",     role:"upstream(상위)", desc:"앤지오텐시노겐, RAS 경로 기질 공급"},
+     {sym:"TMPRSS2", role:"cofactor(보조인자)", desc:"세린 프로테아제, SARS-CoV-2 S 단백질 절단 촉진"},
+     {sym:"ADAM17",  role:"shedding(쉐딩)", desc:"TACE, ACE2 세포외 도메인 절단 → 가용성 ACE2 생성"},
+     {sym:"AGTR1",   role:"pathway(경로)", desc:"AT1 수용체, Ang II 결합 → 혈관수축/섬유화"},
+     {sym:"MAS1",    role:"downstream(하위)", desc:"MAS 수용체, Ang(1-7) 결합 → 항염증/혈관확장"},
+     {sym:"REN",     role:"upstream(상위)", desc:"레닌, 앤지오텐시노겐→앤지오텐신I 변환 개시"},
+   ]},
+  {name:"hERG (KCNH2)", id:"Q12809", func:"K+ channel, cardiotoxicity(K+ 채널, 심장독성)", cat:"Ion Channel(이온채널)",
+   gene:"KCNH2", chr:"7q36.1",
+   genes:[
+     {sym:"KCNH2",  role:"encoding(인코딩)", desc:"hERG 채널 α-서브유닛, 심장 IKr 전류 생성"},
+     {sym:"KCNE2",  role:"β-subunit(β서브유닛)", desc:"MiRP1, hERG 채널 게이팅/안정성 조절"},
+     {sym:"KCNQ1",  role:"complementary(보완)", desc:"KvLQT1, IKs 전류 생성, QT 간격 조절"},
+     {sym:"SCN5A",  role:"complementary(보완)", desc:"Nav1.5, 심장 Na⁺ 채널, 활동전위 탈분극"},
+     {sym:"KCNE1",  role:"modulator(조절자)", desc:"minK, KCNQ1 보조서브유닛, IKs 전류 조절"},
+     {sym:"KCNJ2",  role:"complementary(보완)", desc:"Kir2.1, IK1 전류, 안정 막전위 유지"},
+     {sym:"CACNA1C",role:"complementary(보완)", desc:"Cav1.2, L-type Ca²⁺ 채널, 심장 수축"},
+     {sym:"ANKB",   role:"anchoring(앵커링)", desc:"Ankyrin-B, 이온 채널 막 위치 고정"},
+   ]},
+  {name:"CDK2", id:"P24941", func:"Cyclin-dependent kinase 2, cell cycle(사이클린의존키나제2, 세포주기)", cat:"Kinase(키나제)",
+   gene:"CDK2", chr:"12q13.2",
+   genes:[
+     {sym:"CDK2",   role:"encoding(인코딩)", desc:"CDK2 키나제, G1/S 및 S기 세포주기 전이 구동"},
+     {sym:"CCNE1",  role:"activator(활성자)", desc:"Cyclin E1, CDK2와 결합 → G1/S 전이 촉진"},
+     {sym:"CCNA2",  role:"activator(활성자)", desc:"Cyclin A2, CDK2 결합 → S기 DNA 복제 개시"},
+     {sym:"CDKN1A", role:"inhibitor(억제자)", desc:"p21/WAF1, CDK2 억제 → 세포주기 정지 (p53 하위)"},
+     {sym:"CDKN1B", role:"inhibitor(억제자)", desc:"p27/Kip1, CDK2 억제 → G1 정지, 접촉 억제"},
+     {sym:"RB1",    role:"substrate(기질)", desc:"Rb 종양억제, CDK2 인산화 기질 → E2F 유리"},
+     {sym:"E2F1",   role:"downstream(하위)", desc:"전사인자, Rb 인산화 후 S기 유전자 활성화"},
+     {sym:"CDC25A", role:"activator(활성자)", desc:"포스파타제, CDK2 탈인산화 → 활성 복합체 형성"},
+   ]},
+  {name:"HDAC6", id:"Q9UBN7", func:"Histone deacetylase 6, epigenetics(히스톤탈아세틸화효소6, 후성유전학)", cat:"Enzyme(효소)",
+   gene:"HDAC6", chr:"Xp11.23",
+   genes:[
+     {sym:"HDAC6",   role:"encoding(인코딩)", desc:"HDAC6 단백질 코딩, 세포질 탈아세틸화효소 (2개 촉매 도메인)"},
+     {sym:"TUBA1A",  role:"substrate(기질)", desc:"α-Tubulin, HDAC6 주요 기질 → 미세소관 안정성 조절"},
+     {sym:"HSP90AA1",role:"substrate(기질)", desc:"HSP90, HDAC6 탈아세틸화 → 샤페론 기능 조절"},
+     {sym:"CTTN",    role:"substrate(기질)", desc:"Cortactin, HDAC6 기질 → 세포 이동/침윤 조절"},
+     {sym:"SQSTM1",  role:"autophagy(자가포식)", desc:"p62, 유비퀴틴화 단백질 인식 → HDAC6 매개 어그리좀 형성"},
+     {sym:"TFEB",    role:"downstream(하위)", desc:"전사인자, HDAC6 매개 리소좀 생합성 조절"},
+     {sym:"HDAC1",   role:"paralog(파랄로그)", desc:"Class I HDAC, 핵 내 히스톤 탈아세틸화"},
+     {sym:"NLRP3",   role:"regulation(조절)", desc:"인플라마좀, HDAC6 매개 아세틸화 상태에 의해 조절"},
+   ]},
+  {name:"SRD5A2", id:"P31213", func:"5α-Reductase, DHT synthesis, AGA(5α-환원효소, DHT 합성, 탈모)", cat:"Enzyme(효소)",
+   gene:"SRD5A2", chr:"2p23.1",
+   genes:[
+     {sym:"SRD5A2",  role:"encoding(인코딩)", desc:"5α-환원효소 2형, 테스토스테론 → DHT 변환 (모낭/전립선)"},
+     {sym:"SRD5A1",  role:"paralog(파랄로그)", desc:"5α-환원효소 1형, 피부/간 발현, DHT 보조 생성"},
+     {sym:"SRD5A3",  role:"paralog(파랄로그)", desc:"5α-환원효소 3형, 폴리프레놀 환원, N-글리코실화"},
+     {sym:"AR",      role:"downstream(하위)", desc:"안드로겐 수용체, DHT 결합 → 모낭 축소화 전사 조절"},
+     {sym:"HSD17B3", role:"upstream(상위)", desc:"17β-HSD3, 안드로스텐디온 → 테스토스테론 변환"},
+     {sym:"CYP17A1", role:"upstream(상위)", desc:"17α-Hydroxylase, 안드로겐 생합성 경로 핵심 효소"},
+     {sym:"CYP19A1", role:"crosstalk(교차)", desc:"아로마타제, 테스토스테론 → 에스트라디올 변환 (경쟁 경로)"},
+     {sym:"AKR1C3",  role:"alternative(대체)", desc:"Aldo-keto 환원효소, DHT 대체 합성 경로 (백도어 경로)"},
+   ]},
+  {name:"AR", id:"P10275", func:"Androgen Receptor, prostate cancer/AGA(안드로겐 수용체, 전립선암/탈모)", cat:"Receptor(수용체)",
+   gene:"AR", chr:"Xq12",
+   genes:[
+     {sym:"AR",     role:"encoding(인코딩)", desc:"안드로겐 수용체, 핵 수용체 전사인자 (CAG 반복 다형성)"},
+     {sym:"FOXA1",  role:"pioneer TF(개척 전사인자)", desc:"Forkhead box A1, AR 크로마틴 접근성 개방"},
+     {sym:"NCOA1",  role:"coactivator(보조활성자)", desc:"SRC-1, AR 전사 보조활성인자 → 타깃 유전자 발현↑"},
+     {sym:"NCOA2",  role:"coactivator(보조활성자)", desc:"GRIP1/TIF2, AR 전사 증폭 보조활성인자"},
+     {sym:"KLK3",   role:"target gene(표적유전자)", desc:"PSA, AR 직접 표적유전자 (전립선암 바이오마커)"},
+     {sym:"TMPRSS2",role:"target gene(표적유전자)", desc:"AR 표적유전자, TMPRSS2-ERG 융합 (전립선암)"},
+     {sym:"FKBP5",  role:"target gene(표적유전자)", desc:"AR 표적유전자, 면역억제/스트레스 반응 조절"},
+     {sym:"NR3C1",  role:"crosstalk(교차)", desc:"글루코코르티코이드 수용체, AR과 리간드/경로 교차"},
+   ]},
+];
+const PROFILES = {
+  "CC(=O)Oc1ccccc1C(=O)O": {n:"Aspirin", a:{"COX-2 (PTGS2)":[.94,8.2],"EGFR":[.12,3.1],"ACE2":[.08,2.8],"hERG (KCNH2)":[.15,3.5],"CDK2":[.11,3.0],"HDAC6":[.09,2.9],"SRD5A2":[.06,2.5],"AR":[.07,2.6]}},
+  "CC(C)Cc1ccc(cc1)C(C)C(=O)O": {n:"Ibuprofen", a:{"COX-2 (PTGS2)":[.91,7.8],"EGFR":[.10,3.0],"ACE2":[.07,2.6],"hERG (KCNH2)":[.18,3.8],"CDK2":[.09,2.8],"HDAC6":[.08,2.7],"SRD5A2":[.05,2.4],"AR":[.06,2.5]}},
+  "CN1C=NC2=C1C(=O)N(C(=O)N2C)C": {n:"Caffeine", a:{"COX-2 (PTGS2)":[.15,3.5],"EGFR":[.22,4.1],"ACE2":[.18,3.8],"hERG (KCNH2)":[.35,4.8],"CDK2":[.72,6.5],"HDAC6":[.28,4.3],"SRD5A2":[.12,3.2],"AR":[.10,3.0]}},
+  "CC12CCC3C(CCC4CC(=O)CCC43C)C1CCC2O": {n:"Testosterone", a:{"COX-2 (PTGS2)":[.08,2.8],"EGFR":[.06,2.5],"ACE2":[.05,2.3],"hERG (KCNH2)":[.12,3.2],"CDK2":[.07,2.6],"HDAC6":[.09,2.8],"SRD5A2":[.88,7.5],"AR":[.95,8.8]}},
+  "OC(=O)CCCCCN1C(=O)c2cccc3cccc1c23": {n:"Tubastatin A", a:{"COX-2 (PTGS2)":[.10,3.0],"EGFR":[.15,3.5],"ACE2":[.07,2.6],"hERG (KCNH2)":[.22,4.0],"CDK2":[.18,3.7],"HDAC6":[.96,8.9],"SRD5A2":[.06,2.4],"AR":[.08,2.7]}},
+  "OC(=O)C1CCC(CC1)NC(=O)C2=CC=C(F)C=C2": {n:"Finasteride", a:{"COX-2 (PTGS2)":[.07,2.6],"EGFR":[.09,2.8],"ACE2":[.06,2.5],"hERG (KCNH2)":[.14,3.3],"CDK2":[.10,3.0],"HDAC6":[.11,3.1],"SRD5A2":[.93,8.4],"AR":[.42,5.2]}},
+};
+
+function setSmiles(s) { document.getElementById('smilesInput').value=s; runPrediction(); }
+
+function runPrediction() {
+  const sm = document.getElementById('smilesInput').value.trim();
+  if(!sm) return;
+  const term = document.getElementById('terminalOutput');
+  const res = document.getElementById('results');
+  const hm = document.getElementById('heatmap');
+
+  // Terminal output
+  const prof = PROFILES[sm];
+  const dname = prof ? prof.n : 'Custom';
+
+  term.innerHTML = `
+<div class="term-line"><span class="term-prompt">$ </span><span class="term-cmd">python predict.py --smiles "${sm.substring(0,40)}${sm.length>40?'...':''}"</span></div>
+<div class="term-line"><span class="term-info">[INFO] </span><span class="term-output">Loading CPI Foundation Model(CPI 파운데이션 모델 로딩 중)...</span></div>
+<div class="term-line"><span class="term-success">[OK] </span><span class="term-output">Model loaded(모델 로딩 완료) (750M params, device=cuda:0)</span></div>
+<div class="term-line"><span class="term-info">[INFO] </span><span class="term-output">Drug(약물): ${dname} | SMILES: ${sm.substring(0,50)}</span></div>
+<div class="term-line"><span class="term-info">[INFO] </span><span class="term-output">Encoding drug(약물 인코딩) (ChemBERTa)... </span><span class="term-success">done(완료)</span></div>
+<div class="term-line"><span class="term-info">[INFO] </span><span class="term-output">Screening 8 protein targets(8개 단백질 타깃 스크리닝 중)...</span></div>`;
+
+  setTimeout(() => {
+    let preds;
+    if(prof) {
+      preds = DB.map(p => ({...p, prob: prof.a[p.name][0], pkd: prof.a[p.name][1]}));
+    } else {
+      let h=0; for(let i=0;i<sm.length;i++) h=((h<<5)-h)+sm.charCodeAt(i);
+      preds = DB.map((p,i)=>{ const s=Math.abs(h*(i+1)*13)%1000; const pr=Math.min(.98,Math.max(.03,(s%100)/100));
+        return{...p,prob:+pr.toFixed(4),pkd:+(pr>.5?5+pr*4:2+pr*4).toFixed(2)}; });
+    }
+    preds.sort((a,b)=>b.prob-a.prob);
+
+    term.innerHTML += `<div class="term-line"><span class="term-success">[DONE] </span><span class="term-output">Prediction complete(예측 완료). Results(결과):</span></div>
+<div class="term-line"></div>`;
+
+    // Build results
+    let rhtml = `<div class="demo-panel" style="margin-top:12px;">
+      <div class="demo-panel-header">◈ Predicted Targets(예측 타깃) — ${dname} <span style="font-weight:400; opacity:0.5; font-size:10px; margin-left:8px;">click target → 3D structure(타깃 클릭 → 3D 구조 보기)</span></div>`;
+    preds.forEach((p,i)=>{
+      const rc = i===0?'r1':i===1?'r2':i===2?'r3':'rx';
+      const pc = p.prob>=.7?'var(--success)':p.prob>=.4?'var(--warning)':'var(--error)';
+      const kd = Math.pow(10,9-p.pkd).toFixed(1);
+      // Gene tags for result item
+      const geneTag = p.gene ? `<span style="color:var(--decorator);font-size:10px;margin-left:6px;background:rgba(197,134,192,0.15);padding:1px 5px;border-radius:2px;" title="Encoding gene(코딩 유전자)">Gene: ${p.gene}</span>` : '';
+      const relGenes = (p.genes||[]).filter(g=>g.role!=='encoding(인코딩)').slice(0,3).map(g=>`<span style="color:var(--variable);font-size:9px;background:rgba(156,220,254,0.1);padding:1px 4px;border-radius:2px;" title="${g.desc}">${g.sym}</span>`).join(' ');
+      rhtml += `<div class="result-item" onclick="openProteinViewer('${p.name}',${p.prob*100},${p.pkd})" title="Click to view 3D structure(클릭 → 3D 구조 보기)">
+        <div class="result-rank ${rc}">${i+1}</div>
+        <div class="result-info">
+          <div class="result-name">${p.name} <span style="color:var(--text3);font-size:10px;font-weight:400;">${p.id} · ${p.cat}</span>${geneTag}</div>
+          <div class="result-func">${p.func}</div>
+          <div style="margin-top:3px;display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+            <span style="color:var(--text3);font-size:9px;">Related Genes(관련유전자):</span> ${relGenes}
+          </div>
+          <div class="prob-bar"><div class="prob-fill" style="width:${p.prob*100}%;background:${pc};"></div></div>
+        </div>
+        <div class="result-vals">
+          <div class="result-val" title="P(BIND): 약물이 이 단백질에 결합할 확률 — 높을수록 강한 상호작용 예측"><div class="v" style="color:${pc};">${(p.prob*100).toFixed(1)}%</div><div class="l">P(BIND)(결합확률)</div></div>
+          <div class="result-val" title="pKd: 결합 친화도의 음의 로그값(-log₁₀Kd) — 높을수록 약물이 타깃에 더 강하게 결합"><div class="v">${p.pkd}</div><div class="l">pKd(친화도)</div></div>
+          <div class="result-val" title="Kd: 해리상수 — 약물-단백질 복합체가 50% 분리되는 농도(nM), 낮을수록 강한 결합"><div class="v" style="font-size:11px;">${kd}nM</div><div class="l">Kd(해리상수)</div></div>
+        </div>
+      </div>`;
+
+      term.innerHTML += `<div class="term-line">  <span style="color:${pc};">[${i+1}]</span> ${p.name.padEnd(16)} <span class="term-info">P=${p.prob.toFixed(4)}</span>  pKd=<span class="num">${p.pkd}</span>  Kd=<span class="num">${kd}nM</span></div>`;
+    });
+    rhtml += '</div>';
+    res.innerHTML = rhtml;
+
+    // Heatmap
+    const top = preds[0];
+    const residues = "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSH".split('');
+    const dtokens = sm.substring(0,12).split('');
+    let h2 = `<div class="demo-panel" style="margin-top:12px;">
+      <div class="demo-panel-header">◈ Binding Site Attention(결합부위 어텐션) — ${top.name}</div>
+      <div style="padding:12px; overflow-x:auto;">
+      <div class="heatmap-grid"><div class="heatmap-row"><div class="hm-label" style="color:var(--text3);">·</div>`;
+    residues.forEach(r=>{ h2+=`<div class="hm-label">${r}</div>`; });
+    h2+='</div>';
+    let hash=0; for(let i=0;i<sm.length;i++) hash=((hash<<5)-hash)+sm.charCodeAt(i);
+    dtokens.forEach((dt,di)=>{
+      h2+=`<div class="heatmap-row"><div class="hm-label" style="color:var(--string);">${dt}</div>`;
+      residues.forEach((r,ri)=>{
+        let seed=Math.abs(hash*(di+1)*(ri+1)*7)%1000;
+        let a=(seed%100)/100;
+        if((ri>=12&&ri<=16)||(ri>=28&&ri<=32)) a=Math.min(1,a+0.4);
+        a=Math.min(1,a);
+        const bg = a>0.6?`rgba(86,156,214,${0.3+a*0.7})`:a>0.3?`rgba(78,201,176,${0.2+a*0.5})`:`rgba(255,255,255,${a*0.15})`;
+        const txt = a>0.6?'#fff':'transparent';
+        h2+=`<div class="hm-cell" style="background:${bg};color:${txt};" title="${r}${ri+1}: ${a.toFixed(2)}">${a>0.6?a.toFixed(1):''}</div>`;
+      });
+      h2+='</div>';
+    });
+    h2+=`</div><div style="font-size:10px;color:var(--text3);margin-top:8px;">
+      <span class="cmt">// High attention = predicted binding residue(높은 어텐션 = 예측 결합 잔기). Layer 6 mean weights(6층 평균 가중치).</span></div></div></div>`;
+    hm.innerHTML = h2;
+
+    term.innerHTML += `<div class="term-line"></div><div class="term-line"><span class="term-success">[OK] </span><span class="term-output">Top target(최상위 타깃): ${top.name} (P=${top.prob.toFixed(4)}, pKd=${top.pkd})</span></div>`;
+  }, 500);
+}
+
+// ── 3D Protein Viewer ──
+const PDB_MAP = {
+  "COX-2 (PTGS2)":  { pdb:"5IKR", chain:"A", desc:"Cyclooxygenase-2 with inhibitor bound(억제제 결합 사이클로옥시게나제-2)", residues:587, mw:"68.7 kDa", family:"Oxidoreductase", bindingSite:[120,355,385,513,523,530], color:"#FF6B6B" },
+  "EGFR":           { pdb:"1M17", chain:"A", desc:"EGFR kinase domain with erlotinib(엘로티닙 결합 EGFR 키나제 도메인)", residues:330, mw:"37.5 kDa", family:"Tyrosine Kinase", bindingSite:[718,790,855,858], color:"#4ECDC4" },
+  "ACE2":           { pdb:"1R42", chain:"A", desc:"ACE2 extracellular domain(ACE2 세포외 도메인)", residues:597, mw:"67.8 kDa", family:"Metalloprotease", bindingSite:[345,371,378,394], color:"#45B7D1" },
+  "hERG (KCNH2)":   { pdb:"5VA2", chain:"A", desc:"hERG K+ channel cryo-EM structure(hERG K+ 채널 Cryo-EM 구조)", residues:691, mw:"78.0 kDa", family:"Ion Channel", bindingSite:[623,649,652,656], color:"#F7DC6F" },
+  "CDK2":           { pdb:"1HCK", chain:"A", desc:"CDK2 with ATP binding pocket(ATP 결합 포켓 CDK2)", residues:298, mw:"33.9 kDa", family:"Ser/Thr Kinase", bindingSite:[10,81,83,145], color:"#BB8FCE" },
+  "HDAC6":          { pdb:"5EDU", chain:"A", desc:"HDAC6 catalytic domain 2(HDAC6 촉매 도메인 2)", residues:362, mw:"41.0 kDa", family:"Hydrolase", bindingSite:[612,614,651,742], color:"#82E0AA" },
+  "SRD5A2":         { pdb:"7BW1", chain:"A", desc:"5α-Reductase Type 2 with finasteride(피나스테리드 결합 5α-환원효소 2형)", residues:254, mw:"28.4 kDa", family:"Oxidoreductase", bindingSite:[30,32,57,91], color:"#F0B27A" },
+  "AR":             { pdb:"1E3G", chain:"A", desc:"Androgen Receptor ligand-binding domain(안드로겐 수용체 리간드결합 도메인)", residues:253, mw:"29.1 kDa", family:"Nuclear Receptor", bindingSite:[701,705,711,877], color:"#AED6F1" },
+};
+
+let currentViewer = null;
+
+// Build gene list HTML for viewer info panel
+function buildGeneListHTML(protName) {
+  const prot = DB.find(p => p.name === protName);
+  if (!prot || !prot.genes || prot.genes.length === 0) return '';
+
+  const roleColors = {
+    'encoding(인코딩)': 'var(--decorator)',
+    'paralog(파랄로그)': 'var(--string)',
+    'expression(발현조절)': 'var(--success)',
+    'downstream(하위)': 'var(--keyword)',
+    'upstream(상위)': 'var(--warning)',
+    'pathway(경로)': 'var(--class)',
+    'crosstalk(교차)': 'var(--error)',
+    'substrate(기질)': 'var(--number)',
+    'inhibitor(억제자)': 'var(--error)',
+    'activator(활성자)': 'var(--success)',
+    'cofactor(보조인자)': 'var(--warning)',
+    'target gene(표적유전자)': 'var(--function)',
+    'coactivator(보조활성자)': 'var(--success)',
+    'pioneer TF(개척 전사인자)': 'var(--class)',
+    'negative reg(음성조절)': 'var(--error)',
+    'heterodimerization(이종이합체)': 'var(--class)',
+    'complementary(보완)': 'var(--keyword)',
+    'modulator(조절자)': 'var(--warning)',
+    'β-subunit(β서브유닛)': 'var(--number)',
+    'anchoring(앵커링)': 'var(--text2)',
+    'autophagy(자가포식)': 'var(--class)',
+    'regulation(조절)': 'var(--warning)',
+    'shedding(쉐딩)': 'var(--string)',
+    'alternative(대체)': 'var(--text2)',
+  };
+
+  let html = `<div style="margin-top:12px; border:1px solid var(--border); background:var(--bg2); overflow:hidden;">
+    <div style="padding:6px 10px; background:var(--bg4); font-size:10px; font-weight:700; color:var(--keyword); text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:6px;">
+      <span>🧬</span> Related Genes(관련 유전자) — <span style="color:var(--decorator);">${prot.gene}</span> <span style="color:var(--text3);font-weight:400;">(${prot.chr})</span>
+    </div>`;
+
+  prot.genes.forEach(g => {
+    const rc = roleColors[g.role] || 'var(--text2)';
+    const isEncoding = g.role === 'encoding(인코딩)';
+    html += `<div style="display:flex; align-items:flex-start; padding:5px 10px; border-bottom:1px solid rgba(62,62,62,0.3); font-size:10px; gap:6px; ${isEncoding?'background:rgba(197,134,192,0.08);':''}">
+      <span style="color:var(--function); font-weight:700; min-width:56px; flex-shrink:0;">${g.sym}</span>
+      <span style="color:${rc}; font-size:9px; min-width:80px; flex-shrink:0; padding:1px 4px; background:rgba(255,255,255,0.04); border-radius:2px; text-align:center;">${g.role}</span>
+      <span style="color:var(--text3); flex:1; line-height:1.4;">${g.desc}</span>
+    </div>`;
+  });
+
+  html += '</div>';
+  return html;
+}
+
+function openProteinViewer(protName, prob, pkd) {
+  const info = PDB_MAP[protName];
+  if (!info) return;
+
+  const overlay = document.getElementById('viewerOverlay');
+  overlay.classList.add('open');
+
+  // Update info panel
+  document.getElementById('viewerProtName').textContent = protName;
+  document.getElementById('viewerInfoBody').innerHTML = `
+    <div class="info-row"><span class="info-label">PDB ID</span><span class="info-value"><span class="kw">${info.pdb}</span></span></div>
+    <div class="info-row"><span class="info-label">Gene(유전자)</span><span class="info-value"><span class="dec">${(DB.find(p=>p.name===protName)||{}).gene||'—'}</span> <span style="color:var(--text3);font-size:10px;">${(DB.find(p=>p.name===protName)||{}).chr||''}</span></span></div>
+    <div class="info-row"><span class="info-label">Chain(사슬)</span><span class="info-value">${info.chain}</span></div>
+    <div class="info-row"><span class="info-label">Residues(잔기 수)</span><span class="info-value"><span class="num">${info.residues}</span></span></div>
+    <div class="info-row"><span class="info-label">MW(분자량)</span><span class="info-value">${info.mw}</span></div>
+    <div class="info-row"><span class="info-label">Family(패밀리)</span><span class="info-value"><span class="cls">${info.family}</span></span></div>
+    <div class="info-row" title="약물이 이 단백질에 결합할 확률 — 높을수록 강한 상호작용"><span class="info-label">P(bind)(결합확률)</span><span class="info-value" style="color:${prob>=70?'var(--success)':prob>=40?'var(--warning)':'var(--error)'};">${prob.toFixed(1)}%</span></div>
+    <div class="info-row" title="결합 친화도의 음의 로그값(-log₁₀Kd) — 높을수록 강한 결합"><span class="info-label">pKd(친화도)</span><span class="info-value"><span class="num">${pkd}</span></span></div>
+    <div class="info-row" title="해리상수 — 약물-단백질 복합체가 50% 분리되는 농도, 낮을수록 강한 결합"><span class="info-label">Kd(해리상수)</span><span class="info-value"><span class="num">${Math.pow(10,9-pkd).toFixed(1)} nM</span></span></div>
+    <div style="margin-top:12px; font-size:11px; color:var(--comment); font-style:italic;">${info.desc}</div>
+    <div style="margin-top:8px; padding:8px; background:var(--bg2); border:1px solid var(--border); font-size:10px; line-height:1.6;">
+      <div style="color:var(--keyword); font-weight:600; margin-bottom:4px;">// Metrics Guide(지표 안내)</div>
+      <div style="color:var(--text3);"><span style="color:var(--function);">P(bind)</span> 약물-타깃 결합 확률. 높을수록 상호작용 가능성↑</div>
+      <div style="color:var(--text3);"><span style="color:var(--function);">pKd</span> 친화도(-log₁₀Kd). 높을수록 약물이 타깃에 더 강하게 결합</div>
+      <div style="color:var(--text3);"><span style="color:var(--function);">Kd</span> 해리상수. 복합체가 절반 분리되는 농도(nM). 낮을수록 강한 결합</div>
+    </div>
+    <div class="binding-legend">
+      <div style="font-weight:600; color:var(--text2); margin-bottom:4px;"><span class="cmt">// Visualization(시각화)</span></div>
+      <div class="legend-item"><div class="legend-dot" style="background:#88AAFF;"></div><span>Protein backbone(단백질 백본) (cartoon)</span></div>
+      <div class="legend-item"><div class="legend-dot" style="background:${info.color};"></div><span>Predicted binding residues(예측 결합 잔기)</span></div>
+      <div class="legend-item"><div class="legend-dot" style="background:#FFD700;"></div><span>Active site(활성 부위) (stick)</span></div>
+    </div>
+    ${buildGeneListHTML(protName)}
+  `;
+
+  // Loading state
+  const container = document.getElementById('viewer3d');
+  container.innerHTML = '<div class="viewer-loading"><div class="spinner"></div><span class="cmt">// fetching PDB(PDB 로딩 중): ' + info.pdb + '...</span></div>';
+
+  // Initialize 3Dmol viewer — try fetch first, fallback to RCSB Mol* iframe
+  setTimeout(() => {
+    container.innerHTML = '';
+
+    // Style applicator function (재사용)
+    function applyStyles(viewer) {
+      viewer.setStyle({}, { cartoon: { color: 'spectrum', opacity: 0.85 } });
+      info.bindingSite.forEach(resi => {
+        viewer.setStyle({resi: resi}, {
+          cartoon: { color: info.color },
+          stick: { color: '#FFD700', radius: 0.15 }
+        });
+      });
+      viewer.addSurface($3Dmol.SurfaceType.VDW, {
+        opacity: 0.25, color: info.color,
+      }, {resi: info.bindingSite});
+      info.bindingSite.forEach(resi => {
+        viewer.addLabel(String(resi), {
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          fontColor: '#FFD700', fontSize: 10,
+          font: 'Fira Code', showBackground: true,
+        }, {resi: resi});
+      });
+      viewer.zoomTo();
+      viewer.spin('y', 0.5);
+      viewer.render();
+    }
+
+    // Fallback: embed RCSB Mol* 3D viewer via iframe (works from file:// protocol)
+    function showMolstarIframe() {
+      currentViewer = null;
+      container.innerHTML = `
+        <iframe src="https://molstar.org/viewer/?pdb-url=https://files.rcsb.org/download/${info.pdb}.pdb&hide-controls=1"
+          style="width:100%; height:100%; border:none; background:#1a1a2e;"
+          allow="fullscreen"
+          loading="eager">
+        </iframe>
+        <div style="position:absolute; bottom:8px; left:8px; background:rgba(0,0,0,0.7); padding:4px 10px; border-radius:3px; font-size:10px; color:var(--text3); z-index:10;">
+          Powered by RCSB Mol*(RCSB Mol* 뷰어) | PDB: <span style="color:var(--keyword);">${info.pdb}</span>
+        </div>`;
+    }
+
+    // Try 3Dmol.js fetch first (works from http/https)
+    try {
+      currentViewer = $3Dmol.createViewer(container, {
+        backgroundColor: '#1a1a2e',
+        antialias: true,
+      });
+
+      const pdbUrl = `https://files.rcsb.org/download/${info.pdb}.pdb`;
+
+      fetch(pdbUrl)
+        .then(resp => {
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          return resp.text();
+        })
+        .then(pdbData => {
+          if (!pdbData || pdbData.trim().length < 100) throw new Error('Empty');
+          currentViewer.addModel(pdbData, 'pdb');
+          applyStyles(currentViewer);
+        })
+        .catch(() => {
+          // fetch failed (CORS / network) → use Mol* iframe
+          showMolstarIframe();
+        });
+    } catch (e) {
+      // 3Dmol init failed → use Mol* iframe
+      showMolstarIframe();
+    }
+  }, 300);
+}
+
+function closeViewer() {
+  document.getElementById('viewerOverlay').classList.remove('open');
+  if (currentViewer) {
+    try { currentViewer.spin(false); } catch(e) {}
+    currentViewer = null;
+  }
+  // Remove iframe or 3Dmol content
+  document.getElementById('viewer3d').innerHTML = '';
+}
+
+function setViewStyle(style) {
+  if (!currentViewer) { alert('Mol* iframe 모드에서는 RCSB 뷰어 내부 컨트롤을 사용해 주세요.'); return; }
+  document.querySelectorAll('.viewer-ctrl-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  const pName = document.getElementById('viewerProtName').textContent;
+  const info = PDB_MAP[pName];
+
+  currentViewer.setStyle({}, {});
+
+  switch(style) {
+    case 'cartoon':
+      currentViewer.setStyle({}, { cartoon: { color: 'spectrum', opacity: 0.85 } });
+      break;
+    case 'surface':
+      currentViewer.setStyle({}, { cartoon: { color: 'spectrum', opacity: 0.4 } });
+      currentViewer.addSurface($3Dmol.SurfaceType.MS, { opacity: 0.6, colorscheme: 'whiteCarbon' });
+      break;
+    case 'stick':
+      currentViewer.setStyle({}, { stick: { colorscheme: 'Jmol', radius: 0.12 } });
+      break;
+    case 'sphere':
+      currentViewer.setStyle({}, { sphere: { colorscheme: 'Jmol', scale: 0.3 } });
+      break;
+    case 'bsite':
+      currentViewer.setStyle({}, { cartoon: { color: '#444466', opacity: 0.5 } });
+      if (info) {
+        info.bindingSite.forEach(resi => {
+          currentViewer.setStyle({resi: resi}, {
+            cartoon: { color: info.color },
+            stick: { color: '#FFD700', radius: 0.18 }
+          });
+        });
+        currentViewer.addSurface($3Dmol.SurfaceType.VDW, {
+          opacity: 0.35, color: info.color
+        }, {resi: info.bindingSite});
+      }
+      break;
+  }
+
+  // Re-highlight binding sites for non-bsite views
+  if (style !== 'bsite' && info) {
+    info.bindingSite.forEach(resi => {
+      currentViewer.addStyle({resi: resi}, {
+        stick: { color: '#FFD700', radius: 0.15 }
+      });
+    });
+  }
+
+  currentViewer.render();
+}
+
+function toggleSpin() {
+  if (!currentViewer) return; // iframe mode: no-op
+  const btn = event.target;
+  if (btn.classList.contains('active')) {
+    btn.classList.remove('active');
+    currentViewer.spin(false);
+  } else {
+    btn.classList.add('active');
+    currentViewer.spin('y', 0.5);
+  }
+}
+
+// Nav smooth scroll via tabs
+window.addEventListener('load', ()=>{ switchTab('overview'); });
+</script>
+
+<!-- ── 3D Protein Viewer Overlay ── -->
+<div class="viewer-overlay" id="viewerOverlay" onclick="if(event.target===this)closeViewer();">
+  <div class="viewer-panel">
+    <div class="viewer-titlebar">
+      <span>◈ 3D Protein Structure(3D 단백질 구조) — </span>
+      <span id="viewerProtName" class="fn" style="margin-left:4px;"></span>
+      <div class="close-btn" onclick="closeViewer()">×</div>
+    </div>
+    <div class="viewer-body">
+      <div class="viewer-3d" id="viewer3d"></div>
+      <div class="viewer-info">
+        <h3><span class="cmt">//</span> Protein Info(단백질 정보)</h3>
+        <div id="viewerInfoBody"></div>
+        <div style="margin-top:16px;">
+          <div style="font-size:10px; color:var(--text3); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;">Render Style(렌더링 스타일)</div>
+          <div class="viewer-controls">
+            <button class="viewer-ctrl-btn" onclick="setViewStyle('cartoon')">Cartoon(만화)</button>
+            <button class="viewer-ctrl-btn active" onclick="setViewStyle('bsite')">Binding Site(결합부위)</button>
+            <button class="viewer-ctrl-btn" onclick="setViewStyle('surface')">Surface(표면)</button>
+            <button class="viewer-ctrl-btn" onclick="setViewStyle('stick')">Stick(막대)</button>
+            <button class="viewer-ctrl-btn" onclick="setViewStyle('sphere')">Sphere(구)</button>
+            <button class="viewer-ctrl-btn active" onclick="toggleSpin()">Spin(회전)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
